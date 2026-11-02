@@ -104,6 +104,8 @@ Por consola, el número de shards solo puede ir entre la mitad y el doble en cad
 
 Los resultados se anotan en [docs/informe.md](docs/informe.md).
 
+**Ejercicios adicionales** (productor parametrizable, consumidores que compiten o se reparten shards, hot shard, reshard, enhanced fan-out y leases en DynamoDB): ver [docs/ejercicios.md](docs/ejercicios.md).
+
 **Pruebas locales** (sin AWS):
 
 ```bash

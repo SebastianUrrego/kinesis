@@ -48,11 +48,20 @@ lambda/contar_alertas.py      Reto: resumen por lote → s3://BUCKET/resumen-ale
 sql/athena.sql                Tablas sensores y resumen_alertas (JsonSerDe) y consultas
 scripts/crear_recursos.sh     <bucket> [firehose|planb]; SHARDS=3 RETO=1 para el reto. Idempotente
 scripts/limpieza.sh           <bucket>: borra triggers, Lambdas, Firehose, stream y bucket, y verifica
+src/productor_param.py        Ejercicios adicionales 1: --tasa --duracion --claves --sesgo, lotes de 500
+src/consumidor_shard.py       Ej. 2, 3 y 5: un shard por proceso; --pausa, --seguir-hijos, --verificar
+src/contador_por_shard.py     Ej. 4: registros por shard (hot shard), --minutos, --csv
+src/consumidor_efo.py         Ej. 6: enhanced fan-out (SubscribeToShard); elimina el consumidor al salir
+src/consumidor_leases.py      Reto de los ejercicios: leases en DynamoDB (tabla leases), checkpoint, reparto
 tests/test_local.py           Pruebas sin AWS: python -m unittest discover -s tests -v
 docs/respuestas.md            Preguntas de los labs y las 7 preguntas de repaso
 docs/informe.md               Informe: diagrama, decisiones y costos (las tablas de resultados las rellena el usuario)
 docs/evidencias/              Capturas (métricas, logs, objetos en S3, limpieza)
+docs/ejercicios.md            Ejercicios adicionales: comandos, tablas de resultados y respuestas
+docs/ejercicios_adicionales_enunciado.pdf   Enunciado de los ejercicios adicionales
 ```
+
+Los ejercicios adicionales usan los nombres de su enunciado: streams `ej-compite` (1 shard), `ej-reparto` (3) y `ej-reshard` (2 → 4), y la tabla DynamoDB `leases`. Allí las claves van de `CT-001` a `CT-0NN` según `--claves`. `limpieza.sh` también los borra.
 
 Nombres de los recursos creados por los scripts: Firehose `taller-kinesis-firehose`, Lambdas `procesar-sensores`, `taller-kinesis-planb-s3` y `taller-kinesis-contar-alertas`. Si se agrega un recurso, también hay que añadirlo a `limpieza.sh`.
 

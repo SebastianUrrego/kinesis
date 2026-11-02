@@ -8,9 +8,10 @@ set -uo pipefail
 
 BUCKET=${1:-}
 export AWS_DEFAULT_REGION=us-east-1
-STREAM=taller-kinesis-sensores
+STREAMS=(taller-kinesis-sensores ej-compite ej-reparto ej-reshard)   # taller + ejercicios adicionales
 FIREHOSE=taller-kinesis-firehose
 LAMBDAS=(procesar-sensores taller-kinesis-planb-s3 taller-kinesis-contar-alertas)
+TABLA_LEASES=leases                                                 # reto de los ejercicios adicionales
 
 # --- Lambdas y sus triggers ------------------------------------------------------------
 for f in "${LAMBDAS[@]}"; do
@@ -30,11 +31,21 @@ if aws firehose describe-delivery-stream --delivery-stream-name "$FIREHOSE" >/de
   aws firehose delete-delivery-stream --delivery-stream-name "$FIREHOSE"
 fi
 
-# --- Kinesis Data Stream (consume crédito mientras exista) -----------------------------
-if aws kinesis describe-stream-summary --stream-name "$STREAM" >/dev/null 2>&1; then
-  echo "[stream] borrando $STREAM"
-  aws kinesis delete-stream --stream-name "$STREAM" --enforce-consumer-deletion
-  aws kinesis wait stream-not-exists --stream-name "$STREAM"
+# --- Kinesis Data Streams (consumen crédito mientras existan) --------------------------
+# --enforce-consumer-deletion también elimina los consumidores enhanced fan-out (Ej. 6).
+for s in "${STREAMS[@]}"; do
+  if aws kinesis describe-stream-summary --stream-name "$s" >/dev/null 2>&1; then
+    echo "[stream] borrando $s"
+    aws kinesis delete-stream --stream-name "$s" --enforce-consumer-deletion
+    aws kinesis wait stream-not-exists --stream-name "$s"
+  fi
+done
+
+# --- Tabla DynamoDB de leases (reto de los ejercicios adicionales) ---------------------
+if aws dynamodb describe-table --table-name "$TABLA_LEASES" >/dev/null 2>&1; then
+  echo "[dynamodb] borrando $TABLA_LEASES"
+  aws dynamodb delete-table --table-name "$TABLA_LEASES" >/dev/null
+  aws dynamodb wait table-not-exists --table-name "$TABLA_LEASES"
 fi
 
 # --- Bucket S3 ---------------------------------------------------------------------------
@@ -58,4 +69,5 @@ echo "Lambdas del taller:  $(aws lambda list-functions \
   --output text)"
 echo "Buckets del taller:  $(aws s3api list-buckets \
   --query "Buckets[?starts_with(Name, 'taller-kinesis-')].Name" --output text)"
+echo "Tabla de leases:     $(aws dynamodb list-tables --query "TableNames[?@=='$TABLA_LEASES']" --output text)"
 echo "Todo lo anterior debe estar vacío. Después pulse End Lab."

@@ -17,11 +17,24 @@ sys.path[:0] = [os.path.join(RAIZ, "lambda"), os.path.join(RAIZ, "src")]
 boto3_falso = types.ModuleType("boto3")
 boto3_falso.client = lambda *a, **k: mock.MagicMock()
 sys.modules.setdefault("boto3", boto3_falso)
+try:
+    from botocore.exceptions import ClientError
+except ImportError:  # sin botocore instalado: una ClientError mínima basta para las pruebas
+    class ClientError(Exception):
+        def __init__(self, response, operation):
+            super().__init__(operation)
+            self.response = response
+    botocore_falso = types.ModuleType("botocore")
+    botocore_falso.exceptions = types.SimpleNamespace(ClientError=ClientError)
+    sys.modules["botocore"], sys.modules["botocore.exceptions"] = botocore_falso, botocore_falso.exceptions
 
+import consumidor_leases  # noqa: E402
+import consumidor_shard  # noqa: E402
 import contar_alertas  # noqa: E402
 import plan_b_s3_writer  # noqa: E402
 import procesar_sensores  # noqa: E402
 import productor  # noqa: E402
+import productor_param  # noqa: E402
 
 
 def evento_kinesis(eventos, shard="shardId-000000000000"):
@@ -114,6 +127,59 @@ class TestProductor(unittest.TestCase):
         self.assertTrue(r["Data"].endswith(b"\n"))
         self.assertEqual(set(json.loads(r["Data"])), {"contenedor_id", "temperatura", "humedad", "timestamp"})
         self.assertEqual(productor.a_registro(e, key_constante=True)["PartitionKey"], "constante")
+
+
+class TestProductorParam(unittest.TestCase):
+    def test_sesgo_y_claves(self):
+        lista = productor_param.claves(30)
+        self.assertEqual((len(lista), lista[0], lista[-1]), (30, "CT-001", "CT-030"))
+        self.assertEqual({productor_param.elegir_clave(lista, 1.0) for _ in range(50)}, {"CT-001"})
+        self.assertGreater(len({productor_param.elegir_clave(lista, 0.0) for _ in range(500)}), 20)
+
+    def test_fallo_parcial_reenvia_solo_los_fallidos(self):
+        kinesis = mock.MagicMock()
+        kinesis.put_records.side_effect = [
+            {"FailedRecordCount": 1, "Records": [
+                {"SequenceNumber": "1"}, {"ErrorCode": "ProvisionedThroughputExceededException"}]},
+            {"FailedRecordCount": 0, "Records": [{"SequenceNumber": "2"}]},
+        ]
+        lote = [productor_param.generar_registro(["CT-001"], 0) for _ in range(2)]
+        with mock.patch("time.sleep"):
+            self.assertEqual(productor_param.enviar_lote(kinesis, "s", lote), (2, 1, 0))
+        self.assertEqual(kinesis.put_records.call_args_list[1].kwargs["Records"], [lote[1]])
+
+
+class TestConsumidorShard(unittest.TestCase):
+    SHARDS = [
+        {"ShardId": "shardId-000000000000", "SequenceNumberRange": {"EndingSequenceNumber": "9"}},
+        {"ShardId": "shardId-000000000002", "ParentShardId": "shardId-000000000000"},
+        {"ShardId": "shardId-000000000003", "ParentShardId": "shardId-000000000000"},
+        {"ShardId": "shardId-000000000004", "ParentShardId": "shardId-000000000001",
+         "AdjacentParentShardId": "shardId-000000000002"},
+    ]
+
+    def test_hijos_de_un_split_y_de_un_merge(self):
+        self.assertEqual(consumidor_shard.hijos(self.SHARDS, "shardId-000000000000"),
+                         ["shardId-000000000002", "shardId-000000000003"])
+        self.assertEqual(consumidor_shard.hijos(self.SHARDS, "shardId-000000000002"), ["shardId-000000000004"])
+        self.assertEqual(consumidor_shard.padres(self.SHARDS[3]), ["shardId-000000000001", "shardId-000000000002"])
+
+
+class TestLeases(unittest.TestCase):
+    def test_objetivo_reparte_parejo(self):
+        self.assertEqual([consumidor_leases.objetivo(4, w) for w in (0, 1, 2, 3)], [4, 4, 2, 2])
+
+    def test_tomar_lease_ocupado_pierde_la_escritura_condicional(self):
+        c = object.__new__(consumidor_leases.Consumidor)
+        c.args = types.SimpleNamespace(ttl=15, stream="s")
+        c.yo, c.mios = "w2", {}
+        c.tabla = mock.MagicMock()
+        c.tabla.update_item.side_effect = ClientError(
+            {"Error": {"Code": "ConditionalCheckFailedException"}}, "UpdateItem")
+        self.assertFalse(c.tomar("shardId-000000000000"))
+        condicion = c.tabla.update_item.call_args.kwargs["ConditionExpression"]
+        self.assertIn("attribute_not_exists(shard_id)", condicion)
+        self.assertEqual(c.mios, {})
 
 
 if __name__ == "__main__":
