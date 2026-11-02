@@ -97,8 +97,10 @@ SHARDS=3 RETO=1 ./scripts/crear_recursos.sh taller-kinesis-<iniciales>-<número>
 python3 src/productor.py --eventos 1000
 python3 src/consumidor.py --tipo AT_TIMESTAMP --minutos 2 --contar
 python3 src/productor.py --eventos 1000 --key-constante
-python3 src/consumidor.py --tipo AT_TIMESTAMP --minutos 1 --contar
+python3 src/consumidor.py --tipo AT_TIMESTAMP --minutos 2 --contar
 ```
+
+Por consola, el número de shards solo puede ir entre la mitad y el doble en cada cambio: de 1 a 3 hay que pasar por 2.
 
 Los resultados se anotan en [docs/informe.md](docs/informe.md).
 

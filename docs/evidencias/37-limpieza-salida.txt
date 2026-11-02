@@ -1,0 +1,17 @@
+kinesis $ bash scripts/limpieza.sh taller-kinesis-asu-2026
+[lambda] borrando trigger a5f40a41-20d1-416b-8602-209006b5b89f de procesar-sensores
+[lambda] borrando procesar-sensores
+[lambda] borrando trigger f248a412-2169-4430-b218-ce03fab2f335 de taller-kinesis-contar-alertas
+[lambda] borrando taller-kinesis-contar-alertas
+[firehose] borrando taller-kinesis-firehose
+[stream] borrando taller-kinesis-sensores
+[s3] vaciando y borrando taller-kinesis-asu-2026
+(... 43 objetos borrados: athena-resultados/, resumen-alertas/ y sensores/ ...)
+remove_bucket: taller-kinesis-asu-2026
+
+== Verificación ==
+Streams de Kinesis:  
+Streams de Firehose: taller-kinesis-firehose
+Lambdas del taller:  
+Buckets del taller:  
+Todo lo anterior debe estar vacío. Después pulse End Lab.
