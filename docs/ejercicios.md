@@ -126,13 +126,22 @@ aws kinesis delete-stream --stream-name ej-reparto --enforce-consumer-deletion
 
 `--minutos` lee con `AT_TIMESTAMP` solo la última corrida. Sin esa opción, `TRIM_HORIZON` sumaría también las corridas anteriores. El contador dibuja las barras en texto y guarda un CSV para el gráfico de barras del entregable.
 
-| Shard | Corrida A (sesgo 0) | Corrida B (sesgo 0.8) |
-|---|---|---|
-| 0 | _pendiente_ | _pendiente_ |
-| 1 | _pendiente_ | _pendiente_ |
-| 2 | _pendiente_ | _pendiente_ |
+Resultados, 18 000 registros por corrida (gráfico: `evidencias/ej4-grafico-barras.png`):
 
-**¿Qué porcentaje recibe el shard caliente en la corrida B?** En teoría, el 80 % va siempre a `CT-001`. El 20 % restante se reparte entre las 30 claves, y alrededor de un tercio cae en el mismo shard que `CT-001`. Eso da unos 80 + 20/3 ≈ **87 %**. El valor real depende de cuántas de las 30 claves comparten shard con `CT-001`. Con tasa 300, el shard caliente recibe unos 260 registros/s y los otros dos unos 20 cada uno: los 3 shards rinden como 1.
+![Registros por shard en las corridas A y B](evidencias/ej4-grafico-barras.png)
+
+| Shard | Corrida A (sesgo 0) | Corrida B (sesgo 0.8) | Predicción B |
+|---|---|---|---|
+| 000 (contiene `CT-001`) | 7331 (40,7 %) | **15 781 (87,7 %)** | ~88 % |
+| 001 | 2923 (16,2 %) | 613 (3,4 %) | ~3 % |
+| 002 | 7746 (43,0 %) | 1606 (8,9 %) | ~9 % |
+| Clave más frecuente | `CT-024`, 3,6 % | `CT-001`, 80,6 % | ~81 % |
+
+- **La predicción se hizo antes de la corrida.** Con MD5, `CT-001` cae en el shard 000, que tiene 12 de las 30 claves. Por eso se esperaba 80 % + 20 % × 12/30 ≈ 88 %.
+- **La corrida A repite el reparto 12 / 5 / 13 claves del Ejercicio 3.** Ninguna clave domina: la más frecuente tiene el 3,6 %, cerca del 3,3 % ideal.
+- **El primer conteo de la corrida B leyó solo 11 100 registros** (`ej4-corrida-b.png`), aunque el productor envió 18 000 sin errores (`ej4-prod-b.png`). La causa estaba en el contador: `GetRecords` puede devolver lotes vacíos con `MillisBehindLatest > 0` aunque queden registros más adelante, y el contador tomaba 5 lotes vacíos seguidos como fin. Tras corregirlo, el conteo completo del stream dio exactamente 54 000 (`ej4-total.png`): Ejercicio 3, corrida A y corrida B. La fila B de la tabla sale de restar las dos primeras. Los porcentajes de la muestra (87,7 / 3,4 / 8,9) coincidían con los reales.
+
+**¿Qué porcentaje recibe el shard caliente en la corrida B?** En teoría, el 80 % va siempre a `CT-001`. El 20 % restante se reparte entre las 30 claves, y alrededor de un tercio cae en el mismo shard que `CT-001`. Eso da unos 80 + 20/3 ≈ 87 %. En la práctica, `CT-001` comparte shard con 11 de las otras 29 claves, así que la predicción fue 80 + 20 × 12/30 = 88 %, y se midió **87,7 %**. Con tasa 300, el shard caliente recibió unos 263 registros/s y los otros dos, 10 y 27: los 3 shards rinden como 1.
 
 **Dos soluciones y qué orden se pierde:**
 1. **Sufijo aleatorio (*salting*):** usar `CT-001#0` … `CT-001#9` como key. La clave caliente se reparte entre varios shards. Se pierde el orden global de `CT-001`: solo se mantiene dentro de cada sufijo. El consumidor tiene que juntar los sub-flujos, por ejemplo agregando por ventana de tiempo.
