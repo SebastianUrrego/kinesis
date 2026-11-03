@@ -16,9 +16,13 @@ import json
 import time
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 REGION = "us-east-1"
+# boto3 reintenta en silencio ProvisionedThroughputExceededException (hasta 5 intentos con
+# backoff). Con un solo intento, cada rechazo llega al script y se puede contar.
+SIN_REINTENTOS = Config(retries={"mode": "standard", "total_max_attempts": 1})
 
 
 def listar_shards(kinesis, stream):
@@ -54,7 +58,7 @@ def main():
                         help="Ej. 5: comprueba que el timestamp de cada clave nunca retrocede")
     args = parser.parse_args()
 
-    kinesis = boto3.client("kinesis", region_name=REGION)
+    kinesis = boto3.client("kinesis", region_name=REGION, config=SIN_REINTENTOS)
     shards = listar_shards(kinesis, args.stream)
     shard_inicial = shards[args.indice_shard]["ShardId"]
     print(f"[{args.nombre}] shards del stream: {[s['ShardId'] for s in shards]}; leo {shard_inicial}", flush=True)

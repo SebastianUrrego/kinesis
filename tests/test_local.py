@@ -26,7 +26,9 @@ except ImportError:  # sin botocore instalado: una ClientError mínima basta par
             self.response = response
     botocore_falso = types.ModuleType("botocore")
     botocore_falso.exceptions = types.SimpleNamespace(ClientError=ClientError)
-    sys.modules["botocore"], sys.modules["botocore.exceptions"] = botocore_falso, botocore_falso.exceptions
+    botocore_falso.config = types.SimpleNamespace(Config=lambda **k: None)
+    sys.modules.update({"botocore": botocore_falso, "botocore.exceptions": botocore_falso.exceptions,
+                        "botocore.config": botocore_falso.config})
 
 import consumidor_leases  # noqa: E402
 import consumidor_shard  # noqa: E402
