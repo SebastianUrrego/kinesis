@@ -52,6 +52,10 @@ def main():
         hubo = False
         for shard_id, it in list(iteradores.items()):
             salida = kinesis.get_records(ShardIterator=it)
+            # GetRecords puede devolver un lote vacío aunque falten registros más adelante:
+            # mientras MillisBehindLatest > 0 el shard no está al día y hay que seguir leyendo.
+            if salida.get("MillisBehindLatest", 0) > 0:
+                hubo = True
             for r in salida["Records"]:
                 hubo = True
                 for linea in r["Data"].decode("utf-8").strip().splitlines():
@@ -61,6 +65,7 @@ def main():
                 iteradores[shard_id] = salida["NextShardIterator"]
             else:
                 del iteradores[shard_id]
+        # Termina tras ~10 s con todos los shards al día y sin datos nuevos.
         rondas_vacias = 0 if hubo else rondas_vacias + 1
         time.sleep(0.25 if hubo else 2)   # máximo 5 GetRecords/s por shard
 

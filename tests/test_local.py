@@ -32,6 +32,7 @@ except ImportError:  # sin botocore instalado: una ClientError mínima basta par
 
 import consumidor_leases  # noqa: E402
 import consumidor_shard  # noqa: E402
+import contador_por_shard  # noqa: E402
 import contar_alertas  # noqa: E402
 import plan_b_s3_writer  # noqa: E402
 import procesar_sensores  # noqa: E402
@@ -165,6 +166,23 @@ class TestConsumidorShard(unittest.TestCase):
                          ["shardId-000000000002", "shardId-000000000003"])
         self.assertEqual(consumidor_shard.hijos(self.SHARDS, "shardId-000000000002"), ["shardId-000000000004"])
         self.assertEqual(consumidor_shard.padres(self.SHARDS[3]), ["shardId-000000000001", "shardId-000000000002"])
+
+
+class TestContadorPorShard(unittest.TestCase):
+    def test_no_termina_con_lotes_vacios_si_el_shard_esta_atrasado(self):
+        datos = [{"Data": (json.dumps(e) + "\n").encode()} for e in EVENTOS]
+        respuestas = ([{"Records": [], "MillisBehindLatest": 5000, "NextShardIterator": "it"}] * 6
+                      + [{"Records": datos, "MillisBehindLatest": 0, "NextShardIterator": "it"}]
+                      + [{"Records": [], "MillisBehindLatest": 0, "NextShardIterator": "it"}] * 5)
+        kinesis = mock.MagicMock()
+        kinesis.list_shards.return_value = {"Shards": [{"ShardId": "shardId-000000000000"}]}
+        kinesis.get_shard_iterator.return_value = {"ShardIterator": "it"}
+        kinesis.get_records.side_effect = respuestas
+        with mock.patch.object(contador_por_shard.boto3, "client", return_value=kinesis), \
+                mock.patch("time.sleep"), mock.patch("builtins.print") as p, \
+                mock.patch.object(sys, "argv", ["x", "--stream", "s"]):
+            contador_por_shard.main()
+        self.assertIn("Total: 3 registros en 1 shards", [c.args[0].strip() for c in p.call_args_list if c.args])
 
 
 class TestLeases(unittest.TestCase):
