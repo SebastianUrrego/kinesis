@@ -168,11 +168,18 @@ wait; grep RESUMEN prod.log r*.log
 
 Los shards **cerrados** son los padres, `000` y `001`: tienen `EndingSequenceNumber`. Los **abiertos** son los hijos: no lo tienen y muestran un `ParentShardId`. `--seguir-hijos` lee el padre hasta que `NextShardIterator` llega vacío y entonces sigue con sus hijos. `--verificar` cuenta las veces que el `timestamp` de una clave retrocede. La suma de registros de `r0` y `r1` debe ser igual a los enviados del productor.
 
-| | Valor |
-|---|---|
-| Enviados por el productor | _pendiente_ |
-| Leídos por r0 + r1 | _pendiente_ |
-| Inversiones de orden por clave | _pendiente_ (esperado: 0) |
+Resultados (`ej5-list-shards.png` y `ej5-consumidores.png`): `UNIFORM_SCALING` dividió cada padre en dos hijos, `000` → `002` y `003`, y `001` → `004` y `005`.
+
+| Consumidor | Padre (antes del reshard) | Hijos (después) | Total | Inversiones de orden |
+|---|---|---|---|---|
+| r0 | `000`: 2145 | `002` + `003`: 2335 | 4480 | 0 |
+| r1 | `001`: 3684 | `004` + `005`: 3836 | 7520 | 0 |
+| **Suma** | 5829 | 6171 | **12 000** = enviados | **0** |
+
+- **No se perdió ni se duplicó ningún registro:** r0 + r1 = 12 000, exactamente lo que envió el productor.
+- **Cada consumidor leyó su padre hasta el final** ("cerrado y leído completo") antes de abrir los hijos. Por eso el `timestamp` de ninguna clave retrocedió.
+- **El reparto r0 / r1 (37 / 63 %) refleja el hash:** con MD5, 3 de las 8 claves (`CT-001`, `CT-006` y `CT-007`) caen en la mitad baja del rango (`000` y sus hijos) y 5 en la alta.
+- **Los "registros/s" del `RESUMEN` no son significativos aquí:** el consumidor leyó todo de golpe, al ponerse al día desde `TRIM_HORIZON`.
 
 **¿Qué pasa con los datos que ya estaban en los padres?** Se quedan donde estaban. El padre se cierra a nuevas escrituras, pero sigue legible hasta que vence la retención (24 h). Lo nuevo va a los hijos. No se mueve ni se copia ningún registro.
 
